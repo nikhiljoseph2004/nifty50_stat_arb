@@ -14,7 +14,6 @@ setup(
     name="nifty50-stat-arb",
     version="0.1.0",
     author="Nikhil Joseph",
-    author_email="",
     description="A pairs trading strategy for Nifty 50 stocks based on statistical arbitrage",
     long_description=long_description,
     long_description_content_type="text/markdown",

@@ -12,7 +12,6 @@ class Signal(Enum):
     """Trading signals."""
     LONG = 1
     SHORT = -1
-    CLOSE = 0
     NEUTRAL = 0
 
 

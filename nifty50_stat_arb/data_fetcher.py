@@ -88,7 +88,7 @@ class DataFetcher:
         prices_df = prices_df.dropna(thresh=len(prices_df.columns) * 0.8)
         
         # Forward fill remaining NaN values
-        prices_df = prices_df.fillna(method='ffill').fillna(method='bfill')
+        prices_df = prices_df.ffill().bfill()
         
         print(f"Successfully fetched data: {prices_df.shape[0]} days, {prices_df.shape[1]} stocks")
         

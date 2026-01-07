@@ -1,0 +1,28 @@
+# Configuration file for Nifty 50 Statistical Arbitrage Strategy
+
+# Data Parameters
+data:
+  period: "2y"  # Period for historical data (e.g., 1y, 2y, 5y)
+  # start_date: "2020-01-01"  # Alternative: specify start date
+  # end_date: "2023-12-31"    # Alternative: specify end date
+
+# Cointegration Parameters
+cointegration:
+  significance_level: 0.05  # P-value threshold for cointegration test
+  top_pairs: 5              # Number of top pairs to analyze
+
+# Strategy Parameters
+strategy:
+  entry_threshold: 2.0   # Z-score threshold for entry
+  exit_threshold: 0.5    # Z-score threshold for exit
+  stop_loss: 4.0         # Z-score threshold for stop loss
+  lookback_period: 60    # Lookback period for rolling statistics
+
+# Backtesting Parameters
+backtest:
+  initial_capital: 100000  # Initial capital for backtesting
+
+# Output Parameters
+output:
+  generate_plots: true   # Whether to generate plots
+  save_results: true     # Whether to save results to CSV

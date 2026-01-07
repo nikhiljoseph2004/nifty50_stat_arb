@@ -129,6 +129,11 @@ dmypy.json
 data/
 results/
 
+# Test files
+test_validation.py
+*_example.png
+*_backtest.png
+
 # IDE
 .vscode/
 .idea/

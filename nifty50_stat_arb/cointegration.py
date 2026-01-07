@@ -4,7 +4,7 @@ Cointegration analysis module for identifying pairs.
 
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from statsmodels.tsa.stattools import adfuller, coint
 from itertools import combinations
 import warnings
@@ -223,5 +223,3 @@ class CointegrationAnalyzer:
         
         return pd.DataFrame(results)
 
-
-from typing import Optional

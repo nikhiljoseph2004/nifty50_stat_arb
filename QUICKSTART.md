@@ -26,6 +26,8 @@ This will:
 - Find cointegrated pairs
 - Run the strategy on top 5 pairs
 - Display backtest results
+- Cache that download at data/nifty50_prices.csv for reuse
+- Use `--refresh-cache` to force a fresh download if you change the date range
 
 ### 2. Custom Parameters
 

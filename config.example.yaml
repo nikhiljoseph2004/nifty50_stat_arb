@@ -3,6 +3,8 @@
 # Data Parameters
 data:
   period: "2y"  # Period for historical data (e.g., 1y, 2y, 5y)
+  cache_path: "data/nifty50_prices.csv"  # Local cache for fetched prices
+  refresh_cache: false  # Set true to force downloading new data
   # start_date: "2020-01-01"  # Alternative: specify start date
   # end_date: "2023-12-31"    # Alternative: specify end date
 

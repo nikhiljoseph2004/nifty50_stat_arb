@@ -74,6 +74,12 @@ python main.py --period 2y --top-pairs 10 --entry-threshold 2.0 --exit-threshold
 | `--stop-loss` | Z-score threshold for stop loss | 4.0 |
 | `--lookback` | Lookback period for rolling statistics | 60 |
 | `--plot` | Generate plots for results | False |
+| `--cache-path` | Local CSV path for cached price data | data/nifty50_prices.csv |
+| `--refresh-cache` | Re-download data even if a cache exists | False |
+
+### Caching and Reloading
+
+The `DataFetcher` now writes the downloaded price matrix to `data/nifty50_prices.csv` by default. Subsequent runs load that file straight from disk, so the CLI/strategy stack does not re-download data unless you explicitly request it. Use `--cache-path` to point to a different cache or set `--refresh-cache` to force a fresh download (for example, after you change the historical range).
 
 ### Examples
 
@@ -146,7 +152,7 @@ nifty50_stat_arb/
 
 ### DataFetcher
 
-Fetches historical price data for Nifty 50 stocks using Yahoo Finance API.
+Fetches historical price data for Nifty 50 stocks using Yahoo Finance API. The results are cached to `data/nifty50_prices.csv` by default so that repeated runs reuse the local file instead of hitting Yahoo again.
 
 ```python
 from nifty50_stat_arb import DataFetcher

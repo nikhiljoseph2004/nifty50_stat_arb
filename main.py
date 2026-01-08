@@ -5,7 +5,6 @@ Main script for running the Nifty 50 Statistical Arbitrage Strategy.
 
 import argparse
 import sys
-from datetime import datetime, timedelta
 
 from nifty50_stat_arb import DataFetcher, CointegrationAnalyzer, PairsTrading, Backtester
 
@@ -78,6 +77,19 @@ def main():
     )
     
     parser.add_argument(
+        '--cache-path',
+        type=str,
+        default='data/nifty50_prices.csv',
+        help='Path to cache CSV for fetched price data. Defaults to data/nifty50_prices.csv'
+    )
+    
+    parser.add_argument(
+        '--refresh-cache',
+        action='store_true',
+        help='Force data refresh even if a cache exists'
+    )
+    
+    parser.add_argument(
         '--plot',
         action='store_true',
         help='Generate plots for results'
@@ -95,9 +107,18 @@ def main():
     
     try:
         if args.start_date and args.end_date:
-            prices = fetcher.fetch_data(start_date=args.start_date, end_date=args.end_date)
+            prices = fetcher.fetch_data(
+                start_date=args.start_date,
+                end_date=args.end_date,
+                cache_path=args.cache_path,
+                refresh_cache=args.refresh_cache
+            )
         else:
-            prices = fetcher.fetch_data(period=args.period)
+            prices = fetcher.fetch_data(
+                period=args.period,
+                cache_path=args.cache_path,
+                refresh_cache=args.refresh_cache
+            )
     except Exception as e:
         print(f"Error fetching data: {e}")
         sys.exit(1)

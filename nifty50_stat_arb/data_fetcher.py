@@ -9,6 +9,7 @@ import pandas as pd
 import yfinance as yf
 
 DEFAULT_CACHE_PATH = os.path.join("data", "nifty50_prices.csv")
+DEFAULT_RETURNS_CACHE_PATH = os.path.join("data", "nifty50_returns.csv")
 
 
 class DataFetcher:
@@ -46,6 +47,7 @@ class DataFetcher:
         end_date: Optional[str] = None,
         period: str = "1y",
         cache_path: Optional[str] = DEFAULT_CACHE_PATH,
+        returns_cache_path: Optional[str] = DEFAULT_RETURNS_CACHE_PATH,
         refresh_cache: bool = False
     ) -> pd.DataFrame:
         """
@@ -55,6 +57,7 @@ class DataFetcher:
             start_date: Start date in 'YYYY-MM-DD' format
             end_date: End date in 'YYYY-MM-DD' format
             period: Period to fetch if start_date not provided (e.g., '1y', '2y', '5y')
+            returns_cache_path: Path to CSV file where log returns will be saved
             
         Returns:
             DataFrame with closing prices for all symbols
@@ -86,6 +89,7 @@ class DataFetcher:
                         print("Cached data does not contain any rows for the requested range; refetching...")
                         cached_df = None
                     else:
+                        self._save_returns(filtered, returns_cache_path)
                         print(f"Loaded data from cache: {cache_file}")
                         return filtered
 
@@ -136,6 +140,7 @@ class DataFetcher:
         if filtered.empty:
             raise ValueError("No data available for the requested date range")
 
+        self._save_returns(filtered, returns_cache_path)
         return filtered
     
     def get_returns(self, prices: pd.DataFrame) -> pd.DataFrame:
@@ -185,4 +190,17 @@ class DataFetcher:
         cached = pd.read_csv(cache_path, index_col=0, parse_dates=True)
         cached.sort_index(inplace=True)
         return cached
+
+    def _save_returns(self, prices: pd.DataFrame, returns_cache_path: Optional[str]):
+        """Compute and persist log returns if a returns path is provided."""
+        if not returns_cache_path:
+            return
+
+        returns = self.get_returns(prices)
+        directory = os.path.dirname(returns_cache_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+
+        returns.to_csv(returns_cache_path)
+        print(f"Saved returns cache to {returns_cache_path}")
 

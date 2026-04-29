@@ -14,7 +14,7 @@ setup(
     name="nifty50-stat-arb",
     version="0.1.0",
     author="Nikhil Joseph",
-    description="A pairs trading strategy for Nifty 50 stocks based on statistical arbitrage",
+    description="A Nifty 50 price data fetch and caching utility",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/nikhiljoseph2004/nifty50_stat_arb",

@@ -39,8 +39,15 @@ def main():
     parser.add_argument(
         '--cache-path',
         type=str,
-        default='data/nifty50_prices.csv',
-        help='Path to cache CSV for fetched price data. Default: data/nifty50_prices.csv'
+        default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'nifty50', 'prices.csv'),
+        help='Path to cache CSV for fetched price data. Default: data/nifty50/prices.csv'
+    )
+
+    parser.add_argument(
+        '--symbols-file',
+        type=str,
+        default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'symbols', 'nifty50.txt'),
+        help='Path to text file listing ticker symbols (one per line). Default: data/symbols/nifty50.txt'
     )
 
     parser.add_argument(
@@ -69,7 +76,7 @@ def main():
     print("=" * 80)
 
     print("\nFetching historical data...")
-    fetcher = DataFetcher()
+    fetcher = DataFetcher(symbols_file=args.symbols_file)
 
     try:
         if args.start_date and args.end_date:

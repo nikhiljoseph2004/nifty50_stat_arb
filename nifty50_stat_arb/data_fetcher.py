@@ -1,5 +1,5 @@
 """
-Data fetcher module for downloading Nifty 50 stock data.
+Data fetcher module for downloading stock data for arbitrary symbol lists.
 """
 
 import os
@@ -8,46 +8,55 @@ from typing import List, Optional
 import pandas as pd
 import yfinance as yf
 
-DEFAULT_CACHE_PATH = os.path.join("data", "nifty50_prices.csv")
-DEFAULT_RETURNS_CACHE_PATH = os.path.join("data", "nifty50_returns.csv")
-
 
 class DataFetcher:
-    """Fetches historical price data for Nifty 50 stocks."""
-    
-    # Nifty 50 stocks with NSE symbols (Yahoo Finance format)
-    NIFTY50_SYMBOLS = [
-        'ADANIENT.NS', 'ADANIPORTS.NS', 'APOLLOHOSP.NS', 'ASIANPAINT.NS',
-        'AXISBANK.NS', 'BAJAJ-AUTO.NS', 'BAJFINANCE.NS', 'BAJAJFINSV.NS',
-        'BHARTIARTL.NS', 'BPCL.NS', 'BRITANNIA.NS', 'CIPLA.NS',
-        'COALINDIA.NS', 'DIVISLAB.NS', 'DRREDDY.NS', 'EICHERMOT.NS',
-        'GRASIM.NS', 'HCLTECH.NS', 'HDFCBANK.NS', 'HDFCLIFE.NS',
-        'HEROMOTOCO.NS', 'HINDALCO.NS', 'HINDUNILVR.NS', 'ICICIBANK.NS',
-        'INDUSINDBK.NS', 'INFY.NS', 'ITC.NS', 'JSWSTEEL.NS',
-        'KOTAKBANK.NS', 'LT.NS', 'M&M.NS', 'MARUTI.NS',
-        'NESTLEIND.NS', 'NTPC.NS', 'ONGC.NS', 'POWERGRID.NS',
-        'RELIANCE.NS', 'SBILIFE.NS', 'SBIN.NS', 'SHRIRAMFIN.NS',
-        'SUNPHARMA.NS', 'TATACONSUM.NS', 'TMPV.NS', 'TATASTEEL.NS',
-        'TCS.NS', 'TECHM.NS', 'TITAN.NS', 'ULTRACEMCO.NS',
-        'UPL.NS', 'WIPRO.NS'
-    ]
-    
-    def __init__(self, symbols: Optional[List[str]] = None):
+    """Fetches historical price data for an arbitrary list of stock symbols."""
+
+    @staticmethod
+    def load_symbols_from_file(path: str) -> List[str]:
+        """Load ticker symbols from a plain-text file (one per line).
+
+        Lines beginning with ``#`` and blank lines are ignored, so the file
+        can contain comments describing the index.
+        """
+        with open(path) as fh:
+            symbols = [
+                line.strip()
+                for line in fh
+                if line.strip() and not line.strip().startswith("#")
+            ]
+        if not symbols:
+            raise ValueError(f"No symbols found in {path}")
+        return symbols
+
+    def __init__(
+        self,
+        symbols: Optional[List[str]] = None,
+        symbols_file: Optional[str] = None,
+    ):
         """
         Initialize the DataFetcher.
-        
+
+        Exactly one of *symbols* or *symbols_file* must be provided.
+
         Args:
-            symbols: List of stock symbols. If None, uses all Nifty 50 stocks.
+            symbols: Explicit list of Yahoo Finance ticker symbols.
+            symbols_file: Path to a text file with one ticker per line.
         """
-        self.symbols = symbols if symbols is not None else self.NIFTY50_SYMBOLS
+        if symbols_file is not None:
+            self.symbols = self.load_symbols_from_file(symbols_file)
+        elif symbols is not None:
+            self.symbols = symbols
+        else:
+            raise ValueError("Provide either 'symbols' or 'symbols_file'.")
     
     def fetch_data(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         period: str = "1y",
-        cache_path: Optional[str] = DEFAULT_CACHE_PATH,
-        returns_cache_path: Optional[str] = DEFAULT_RETURNS_CACHE_PATH,
+        cache_path: Optional[str] = None,
+        returns_cache_path: Optional[str] = None,
         refresh_cache: bool = False
     ) -> pd.DataFrame:
         """

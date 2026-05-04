@@ -10,8 +10,8 @@ import pandas as pd
 
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DEFAULT_RETURNS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50_returns.csv")
-DEFAULT_PCA_COMPONENTS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50_pca_components.csv")
+DEFAULT_RETURNS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50", "returns.csv")
+DEFAULT_PCA_COMPONENTS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50", "pca_components.csv")
 
 
 def load_returns(returns_path: str = DEFAULT_RETURNS_PATH) -> pd.DataFrame:

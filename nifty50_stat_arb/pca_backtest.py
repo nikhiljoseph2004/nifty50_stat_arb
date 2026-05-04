@@ -21,8 +21,8 @@ import pandas as pd
 
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DEFAULT_RETURNS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50_returns.csv")
-DEFAULT_PCA_COMPONENTS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50_pca_components.csv")
+DEFAULT_RETURNS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50", "returns.csv")
+DEFAULT_PCA_COMPONENTS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50", "pca_components.csv")
 
 
 @dataclass
@@ -103,6 +103,8 @@ def run_backtest(config: BacktestConfig) -> pd.DataFrame:
 
     positions = {asset: 0 for asset in assets}  # +1 long, -1 short, 0 flat
     portfolio_returns: list[float] = []
+    long_counts: list[int] = []
+    short_counts: list[int] = []
     pnl_dates: list[pd.Timestamp] = []
 
     for i, date in enumerate(test_dates):
@@ -148,11 +150,18 @@ def run_backtest(config: BacktestConfig) -> pd.DataFrame:
             day_pnl = 0.5 * long_pnl + 0.5 * short_pnl
 
             portfolio_returns.append(float(day_pnl))
+            long_counts.append(len(long_assets))
+            short_counts.append(len(short_assets))
             pnl_dates.append(next_date)
 
     pnl = pd.Series(portfolio_returns, index=pnl_dates, name="strategy_return")
     cumulative = (1.0 + pnl).cumprod() - 1.0
-    result = pd.DataFrame({"strategy_return": pnl, "cumulative_return": cumulative})
+    result = pd.DataFrame({
+        "strategy_return": pnl,
+        "cumulative_return": cumulative,
+        "long_count": long_counts,
+        "short_count": short_counts,
+    })
     return result
 
 
@@ -178,6 +187,10 @@ def summarize_results(results: pd.DataFrame) -> None:
 
 def main() -> None:
     """CLI entry point for PCA residual z-score backtest."""
+    import sys
+    sys.path.insert(0, PROJECT_ROOT)
+    from nifty50_stat_arb.eigenvalue_plotting import plot_position_counts, DEFAULT_NIFTY50_PLOTS_DIR
+
     parser = argparse.ArgumentParser(description="Run PCA residual z-score backtest")
     parser.add_argument("--returns-path", type=str, default=DEFAULT_RETURNS_PATH)
     parser.add_argument("--pca-components-path", type=str, default=DEFAULT_PCA_COMPONENTS_PATH)
@@ -190,7 +203,13 @@ def main() -> None:
     parser.add_argument(
         "--save-results-path",
         type=str,
-        default=os.path.join(PROJECT_ROOT, "data", "pca_backtest_results.csv"),
+        default=os.path.join(PROJECT_ROOT, "data", "nifty50", "backtest_results.csv"),
+    )
+    parser.add_argument(
+        "--capital",
+        type=float,
+        default=1_000_000.0,
+        help="Initial capital in rupees used to convert returns to PnL on the plot (default: 10,00,000)",
     )
     args = parser.parse_args()
 
@@ -214,6 +233,9 @@ def main() -> None:
             os.makedirs(out_dir, exist_ok=True)
         results.to_csv(args.save_results_path)
         print(f"Saved daily backtest results to {args.save_results_path}")
+
+    plot_path = plot_position_counts(results, plots_dir=DEFAULT_NIFTY50_PLOTS_DIR, initial_capital=args.capital)
+    print(f"Saved position counts plot to {plot_path}")
 
 
 if __name__ == "__main__":

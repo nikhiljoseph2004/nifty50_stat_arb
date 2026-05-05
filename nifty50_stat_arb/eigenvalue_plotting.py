@@ -152,13 +152,13 @@ def plot_position_counts(
         -results["short_count"],
         color="#e15759",
         linewidth=1.5,
-        label="Short positions (negated)",
+        label="Short positions",
     )
     ax.axhline(0, color="black", linewidth=0.8, linestyle="--")
     ax.fill_between(results.index, results["long_count"], 0, alpha=0.15, color="#4e79a7")
     ax.fill_between(results.index, -results["short_count"], 0, alpha=0.15, color="#e15759")
     ax.set_xlabel("Date")
-    ax.set_ylabel("Number of positions")
+    ax.set_ylabel("Number of positions (shorts shown as negative)")
     ax.grid(axis="y", linestyle="--", alpha=0.3)
 
     # --- right axis: cumulative PnL in rupees ---

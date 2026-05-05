@@ -74,8 +74,8 @@ def main() -> None:
     parser.add_argument(
         "--start-date",
         type=str,
-        default="2021-01-01",
-        help="Price history start date (YYYY-MM-DD). Default: 2021-01-01",
+        default=None,
+        help="Price history start date (YYYY-MM-DD). Default: None (uses --period)",
     )
     parser.add_argument(
         "--end-date",
@@ -86,8 +86,8 @@ def main() -> None:
     parser.add_argument(
         "--period",
         type=str,
-        default="5y",
-        help="yfinance period string used when start/end dates are not given. Default: 5y",
+        default="10y",
+        help="yfinance period string used when start/end dates are not given. Default: 10y",
     )
     parser.add_argument(
         "--refresh-cache",

@@ -1,0 +1,5 @@
+use kalman to balance between indexes
+optimize PCs instead of assets
+dont HAVE to have a convex optimization problem, can use other- 
+ benchmark it against a normal convex optimization: find papers for convex opt stat arb, compare and tell why? not just result 
+ maybe PCA removed too much info by compressing 

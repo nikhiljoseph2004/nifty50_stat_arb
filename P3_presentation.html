@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nifty Stat Arb - PCA vs Baseline</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f8f9fc;
+    --surface: #ffffff;
+    --surface2: #e8ecf1;
+    --surface3: #d1d8e0;
+    --accent: #1a6dd4;
+    --accent2: #6c4fcf;
+    --accent3: #0a8f6f;
+    --warn: #d47a0a;
+    --red: #c93d3d;
+    --text: #1a1f2e;
+    --text2: #4a5568;
+    --text3: #8696a7;
+    --radius: 14px;
+  }
+
+  html, body { height: 100%; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); }
+
+  .deck { position: relative; width: 100vw; height: 100vh; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: none; flex-direction: column; justify-content: center; align-items: center;
+    padding: 44px 64px;
+  }
+  .slide.active { display: flex; }
+  .slide-inner { max-width: 1140px; width: 100%; }
+
+  h1 { font-size: 2.9rem; font-weight: 800; line-height: 1.12; margin-bottom: 14px; background: linear-gradient(135deg, var(--accent), var(--accent3)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  h2 { font-size: 2rem; font-weight: 700; line-height: 1.2; margin-bottom: 16px; color: var(--text); }
+  h2 .accent { color: var(--accent); }
+  h3 { font-size: 1.03rem; font-weight: 600; margin-bottom: 8px; color: var(--accent); }
+  p, li { font-size: .95rem; line-height: 1.6; color: var(--text2); }
+  li { margin-bottom: 5px; }
+  ul { padding-left: 20px; }
+  strong { color: var(--text); font-weight: 600; }
+
+  .subtitle { font-size: 1.14rem; color: var(--text2); font-weight: 400; margin-bottom: 24px; }
+  .section-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 10px; }
+
+  .tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: .76rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-right: 6px; margin-bottom: 6px; }
+  .tag-blue   { background: rgba(26,109,212,.1); color: var(--accent); border: 1px solid rgba(26,109,212,.25); }
+  .tag-purple { background: rgba(108,79,207,.1); color: var(--accent2); border: 1px solid rgba(108,79,207,.25); }
+  .tag-green  { background: rgba(10,143,111,.1); color: var(--accent3); border: 1px solid rgba(10,143,111,.25); }
+  .tag-orange { background: rgba(212,122,10,.1); color: var(--warn); border: 1px solid rgba(212,122,10,.25); }
+  .tag-gray   { background: rgba(134,150,167,.12); color: var(--text3); border: 1px solid rgba(134,150,167,.25); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 12px; }
+
+  .card {
+    background: var(--surface); border-radius: var(--radius); padding: 17px 18px;
+    border: 1px solid var(--surface2);
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    transition: transform .22s ease, box-shadow .22s ease;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+  .card h3 { margin-bottom: 8px; }
+  .card p, .card li { font-size: .9rem; }
+
+  .card-accent { border-left: 4px solid var(--accent); }
+  .card-purple { border-left: 4px solid var(--accent2); }
+  .card-green  { border-left: 4px solid var(--accent3); }
+  .card-orange { border-left: 4px solid var(--warn); }
+  .card-red    { border-left: 4px solid var(--red); }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: .9rem; }
+  th { text-align: left; padding: 10px 12px; background: #edf1f7; color: var(--accent); font-weight: 600; border-bottom: 2px solid var(--surface2); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--surface2); color: var(--text2); }
+  tr:last-child td { border-bottom: none; }
+
+  .flow { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .flow-step {
+    background: var(--surface); border-radius: var(--radius); padding: 12px 13px;
+    font-size: .84rem; font-weight: 500; color: var(--text);
+    border: 1px solid var(--surface2); flex: 1; min-width: 100px; text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s;
+  }
+  .flow-step:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.08); }
+  .flow-arrow { font-size: 1.15rem; color: var(--text3); flex-shrink: 0; }
+
+  .big-number { font-size: 2.3rem; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 4px; }
+  .big-label  { font-size: .74rem; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+
+  .insight-box {
+    background: linear-gradient(135deg, rgba(26,109,212,.05), rgba(10,143,111,.05));
+    border: 1px solid rgba(26,109,212,.18); border-radius: var(--radius);
+    padding: 14px 18px; margin-top: 14px;
+  }
+
+  .slide-fig { max-height: 270px; width: auto; max-width: 100%; border-radius: 10px; border: 1px solid var(--surface2); display: block; margin: 10px auto 0; }
+  .comp-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .comp-box { background: var(--surface); border-radius: 12px; border: 1px solid var(--surface2); padding: 10px; }
+  .comp-box p { font-size: .78rem; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .comp-img { width: 100%; height: 170px; object-fit: contain; border-radius: 8px; border: 1px solid var(--surface2); background: #fff; }
+
+  .bar-wrap { margin-top: 6px; }
+  .bar-row  { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .bar-label { width: 8.5rem; text-align: right; font-size: .78rem; color: var(--text3); font-weight: 500; flex-shrink: 0; }
+  .bar-track { flex: 1; background: var(--surface2); border-radius: 5px; height: 20px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 5px; display: flex; align-items: center; padding-left: 8px;
+               font-size: .73rem; font-weight: 700; color: #fff; white-space: nowrap; }
+  .bf-blue   { background: var(--accent); }
+  .bf-teal   { background: var(--accent3); }
+  .bf-yellow { background: #f59e0b; }
+  .bf-gray   { background: var(--surface3); }
+  .bf-purple { background: var(--accent2); }
+  .bf-warn   { background: var(--warn); }
+
+  .nav {
+    position: fixed; bottom: 24px; right: 30px; display: flex; gap: 8px; z-index: 100;
+  }
+  .nav button {
+    width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--surface2);
+    background: var(--surface); color: var(--text); font-size: 1rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,.08);
+    transition: all .25s ease;
+  }
+  .nav button:hover { transform: scale(1.1); background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .progress { position: fixed; top: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent3)); transition: width .35s ease; z-index: 100; }
+  .page-num { position: fixed; bottom: 28px; left: 30px; font-size: .82rem; color: var(--text3); z-index: 100; font-variant-numeric: tabular-nums; }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+  .slide.active .slide-inner { animation: fadeUp .45s ease-out; }
+
+  #overview { display:none; position:fixed; inset:0; background:rgba(26,31,46,.88); z-index:200; backdrop-filter:blur(6px); overflow-y:auto; padding:40px; }
+
+  @media (max-width: 900px) {
+    .slide { padding: 24px 20px; }
+    h1 { font-size: 2rem; } h2 { font-size: 1.35rem; }
+    .grid2, .grid3, .comp-grid { grid-template-columns: 1fr; }
+    .flow { flex-direction: column; }
+    .flow-arrow { transform: rotate(90deg); }
+    .comp-img { height: 220px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="page-num" id="pageNum"></div>
+
+<div class="deck" id="deck">
+
+<div class="slide active">
+  <div class="slide-inner" style="text-align:center;">
+    <h1 style="font-size:3rem; margin-bottom:10px;">Nifty Stat Arb: PCA vs Baseline</h1>
+    <p class="subtitle">Cross-sectional residual mean reversion with rolling refits across Nifty sector indices</p>
+    <div style="display:flex; gap:28px; justify-content:center; margin-top:30px; flex-wrap:wrap;">
+      <div style="text-align:center;">
+        <div style="font-size:1.5rem; font-weight:800; color:var(--accent);">9 Indices</div>
+        <div style="font-size:.82rem; color:var(--text3); font-weight:500; margin-top:2px;">Nifty 50 + sector baskets</div>
+      </div>
+      <div style="width:1px; background:var(--surface2);"></div>
+      <div style="text-align:center;">
+        <div style="font-size:1.5rem; font-weight:800; color:var(--accent3);">10 Years</div>
+        <div style="font-size:.82rem; color:var(--text3); font-weight:500; margin-top:2px;">2016-05 to 2026-05</div>
+      </div>
+      <div style="width:1px; background:var(--surface2);"></div>
+      <div style="text-align:center;">
+        <div style="font-size:1.5rem; font-weight:800; color:var(--accent2);">70/15/15</div>
+        <div style="font-size:.82rem; color:var(--text3); font-weight:500; margin-top:2px;">train, validation, test</div>
+      </div>
+    </div>
+    <div style="margin-top:30px;">
+      <span class="tag tag-blue">PCA Residual Strategy</span>
+      <span class="tag tag-green">Ledoit-Wolf Covariance</span>
+      <span class="tag tag-purple">Coarse-to-Fine Grid Search</span>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent);">Research Question</p>
+    <h2>Does PCA Add Alpha Over <span class="accent">Simple Index Mean Reversion?</span></h2>
+    <p style="margin:8px 0 16px; font-size:1.2rem; font-weight:700; color:var(--text); text-align:center; line-height:1.35;">Can cross-sectional residuals beat a one-factor index-level z-score baseline?</p>
+    <div class="grid2">
+      <div class="card card-accent">
+        <h3>PCA Strategy</h3>
+        <ul>
+          <li>Fit PCA on index constituents in rolling 6-month windows</li>
+          <li>Reconstruct common component and trade residual extremes</li>
+          <li>Asset-level long short mean reversion</li>
+        </ul>
+      </div>
+      <div class="card card-orange">
+        <h3>Baseline Strategy</h3>
+        <ul>
+          <li>No PCA, no cross-sectional decomposition</li>
+          <li>Trade only the aggregate index return z-score</li>
+          <li>Same thresholds and same walk-forward schedule</li>
+        </ul>
+      </div>
+    </div>
+    <div class="insight-box">
+      <p><strong>Fairness rule:</strong> both strategies use identical train-validation-test splits, identical threshold tuning protocol, and identical test evaluation horizon. Only the signal construction differs.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent3);">Data Pipeline</p>
+    <h2>Universe and Backtest <span class="accent">Setup</span></h2>
+    <div class="grid3" style="margin-bottom:14px;">
+      <div class="card card-accent" style="text-align:center;">
+        <div class="big-number">2,469</div>
+        <div class="big-label">trading days per index</div>
+        <p style="margin-top:6px; font-size:.83rem;">Minor variation due to listing history filters</p>
+      </div>
+      <div class="card card-green" style="text-align:center;">
+        <div class="big-number" style="color:var(--accent3);">6m / 6m</div>
+        <div class="big-label">refit / trade cadence</div>
+        <p style="margin-top:6px; font-size:.83rem;">Rolling walk-forward blocks</p>
+      </div>
+      <div class="card card-purple" style="text-align:center;">
+        <div class="big-number" style="color:var(--accent2);">Lookback 60</div>
+        <div class="big-label">z-score volatility window</div>
+        <p style="margin-top:6px; font-size:.83rem;">About 3 months of trading days</p>
+      </div>
+    </div>
+
+    <div class="flow">
+      <div class="flow-step"><strong>Daily close prices</strong><br><span style="font-size:.78rem;color:var(--text3);">per constituent</span></div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step"><strong>Returns matrix</strong><br><span style="font-size:.78rem;color:var(--text3);">index x assets</span></div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step"><strong>PCA or Baseline signal</strong><br><span style="font-size:.78rem;color:var(--text3);">same thresholds</span></div>
+      <div class="flow-arrow">&#8594;</div>
+      <div class="flow-step"><strong>Out-of-sample test</strong><br><span style="font-size:.78rem;color:var(--text3);">final performance</span></div>
+    </div>
+
+    <div class="card card-orange" style="margin-top:14px;">
+      <h3 style="color:var(--warn);">Indices Studied</h3>
+      <p>Nifty50, Auto, Bank, Financial Services, IT, Healthcare, Pharma, Oil and Gas, FMCG</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent2);">PCA Modeling</p>
+    <h2>From Sample Covariance to <span class="accent">Ledoit-Wolf & PCA</span></h2>
+    <div class="grid2" style="margin-bottom:12px;">
+      <div class="card card-red">
+        <h3 style="color:var(--red);">Initial Approach</h3>
+        <ul>
+          <li>Sample covariance from fit window returns</li>
+          <li>Eigenvectors unstable at high dimensions</li>
+          <li>Noisy estimates in short rolling windows</li>
+        </ul>
+      </div>
+      <div class="card card-green">
+        <h3 style="color:var(--accent3);">Refined Approach</h3>
+        <ul>
+          <li>Ledoit-Wolf shrinkage stabilizes estimation</li>
+          <li>Lower variance and better conditioning</li>
+          <li>Robust PCA for walk-forward decomposition</li>
+        </ul>
+      </div>
+    </div>
+
+    <p style="margin-bottom:8px; font-size:.93rem;"><strong>Result:</strong> The first few PCA components capture most co-movement variance. Strategy reconstructs the common component and trades residual extremes.</p>
+    <img src="plots/nifty50/nifty50_pca_components_plot.png" alt="Nifty 50 PCA components plot" class="slide-fig" style="max-height:320px;">
+
+    <div class="insight-box" style="margin-top:12px;">
+      <p><strong>Key insight:</strong> Shrinkage dampens noisy off-diagonal terms. Top PCs isolate common factors; residuals capture idiosyncratic mispricings to trade.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent);">Signal & Hyperparameter Tuning</p>
+    <h2>Trading Rules and <span class="accent">Grid Search Optimization</span></h2>
+
+    <div class="card card-accent" style="margin-bottom:12px;">
+      <h3>Per-asset residual z-score</h3>
+      <p style="margin-bottom:8px;"><strong>For stock i at time t, fitted return:</strong> <i>r̂<sub>i,t</sub></i> = Σ<sub>k=1</sub><sup>K</sup> <i>β<sub>i,k</sub></i> · <i>f<sub>k,t</sub></i></p>
+      <p style="margin-bottom:8px; font-size:.88rem; color:var(--text3);"><i>β<sub>i,k</sub></i>: loading of stock <i>i</i> on factor <i>k</i>, and <i>f<sub>k,t</sub></i>: return (score) of factor <i>k</i> at time <i>t</i>.</p>
+      <p><strong>Standardized residual:</strong> <i>z<sub>i,t</sub></i> = (<i>r<sub>i,t</sub></i> − <i>r̂<sub>i,t</sub></i>) / <i>σ<sub>i,t,rolling</sub></i></p>
+    </div>
+
+    <div class="grid2">
+      <div class="card card-green">
+        <h3 style="color:var(--accent3);">Entry Rules</h3>
+        <ul>
+          <li>Long if <i>z</i> ≤ −<i>entry_z</i></li>
+          <li>Short if <i>z</i> ≥ +<i>entry_z</i></li>
+        </ul>
+      </div>
+      <div class="card card-orange">
+        <h3 style="color:var(--warn);">Exit Rules</h3>
+        <ul>
+          <li>Close long if <i>z</i> ≥ +<i>exit_z</i></li>
+          <li>Close short if <i>z</i> ≤ −<i>exit_z</i></li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top:14px;">
+      <p class="section-label" style="color:var(--accent2); margin-bottom:8px;">Coarse-to-Fine Optimization</p>
+      <div class="flow">
+        <div class="flow-step"><strong>Train/Val split</strong><br><span style="font-size:.78rem;color:var(--text3);">70 / 15</span></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><strong>Coarse grid</strong><br><span style="font-size:.78rem;color:var(--text3);">5×5 candidates</span></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><strong>Fine grid</strong><br><span style="font-size:.78rem;color:var(--text3);">±0.3, step 0.1</span></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><strong>Select by val Sharpe</strong></div>
+      </div>
+    </div>
+
+    <div class="insight-box" style="margin-top:12px;">
+      <p><strong>Design principle:</strong> optimize thresholds on validation data to maximize Sharpe, then evaluate on held-out test period only.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--warn);">Baseline</p>
+    <h2>Comparison Strategy: <span class="accent">Index Mean Reversion</span></h2>
+    <div class="grid2">
+      <div class="card card-orange">
+        <h3 style="color:var(--warn);">Signal Construction</h3>
+        <p style="margin-bottom:8px;"><strong>Index return:</strong> <i>r<sub>index,t</sub></i> = mean(<i>r<sub>i,t</sub></i>)</p>
+        <p><strong>Z-score:</strong> <i>z<sub>t</sub></i> = (<i>r<sub>index,t</sub></i> − <i>μ<sub>rolling</sub></i>) / <i>σ<sub>rolling</sub></i></p>
+        <p style="margin-top:8px; font-size:.9rem;">Rolling window: <strong>6 months</strong> to match PCA refit horizon.</p>
+      </div>
+      <div class="card card-accent">
+        <h3>Execution Rules</h3>
+        <ul>
+          <li>Use same tuned entry/exit thresholds per index</li>
+          <li>Single long or short overlay on equal-weight basket</li>
+          <li>Identical walk-forward block schedule as PCA</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="insight-box" style="margin-top:12px;">
+      <p><strong>Purpose:</strong> test whether PCA cross-sectional decomposition adds value beyond one-dimensional index-level mean reversion.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent3);">Test Results</p>
+    <h2>Sharpe Delta by Index: PCA minus <span class="accent">Baseline</span></h2>
+
+    <div class="bar-wrap">
+      <div class="bar-row"><span class="bar-label">nifty_oil_gas</span><div class="bar-track"><div class="bar-fill bf-teal" style="width:100%;">+2.069</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty_it</span><div class="bar-track"><div class="bar-fill bf-teal" style="width:63%;">+1.306</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty_fin_services</span><div class="bar-track"><div class="bar-fill bf-teal" style="width:54%;">+1.128</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty_fmcg</span><div class="bar-track"><div class="bar-fill bf-yellow" style="width:28%;">+0.577</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty50</span><div class="bar-track"><div class="bar-fill bf-yellow" style="width:17%;">+0.359</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty_bank</span><div class="bar-track"><div class="bar-fill bf-yellow" style="width:8%;">+0.159</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty_pharma</span><div class="bar-track"><div class="bar-fill bf-warn" style="width:4%;">-0.070</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty_auto</span><div class="bar-track"><div class="bar-fill bf-warn" style="width:27%;">-0.556</div></div></div>
+      <div class="bar-row"><span class="bar-label">nifty_healthcare</span><div class="bar-track"><div class="bar-fill bf-warn" style="width:78%;">-1.605</div></div></div>
+    </div>
+
+    <div class="grid3" style="margin-top:12px;">
+      <div class="card card-green" style="text-align:center;"><div class="big-number" style="color:var(--accent3);">6 / 9</div><div class="big-label">indices where PCA wins</div></div>
+      <div class="card card-accent" style="text-align:center;"><div class="big-number">+2.069</div><div class="big-label">best Sharpe uplift</div></div>
+      <div class="card card-red" style="text-align:center;"><div class="big-number" style="color:var(--red);">-1.605</div><div class="big-label">worst Sharpe uplift</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent3);">Category 1</p>
+    <h2>PCA Strong Outperformance: Financial Services, IT, Oil and Gas</h2>
+    <div class="comp-grid">
+      <div class="comp-box"><p>Financial Services</p><img class="comp-img" src="plots/nifty_financial_services_comparison.png" alt="Financial services comparison"></div>
+      <div class="comp-box"><p>IT</p><img class="comp-img" src="plots/nifty_it_comparison.png" alt="IT comparison"></div>
+      <div class="comp-box"><p>Oil and Gas</p><img class="comp-img" src="plots/nifty_oil_gas_comparison.png" alt="Oil and gas comparison"></div>
+    </div>
+    <div class="grid3" style="margin-top:10px;">
+      <div class="card card-green"><h3 style="color:var(--accent3);">nifty_financial_services</h3><p>PCA Sharpe 1.696 vs baseline 0.568, delta +1.128</p></div>
+      <div class="card card-green"><h3 style="color:var(--accent3);">nifty_it</h3><p>PCA Sharpe 0.913 vs baseline -0.393, delta +1.306</p></div>
+      <div class="card card-green"><h3 style="color:var(--accent3);">nifty_oil_gas</h3><p>PCA Sharpe 1.056 vs baseline -1.013, delta +2.069</p></div>
+    </div>
+    <div class="insight-box">
+      <p><strong>Hypothesis for investigation:</strong> Financial Services, IT, and Oil & Gas constituents operate across diverse geographies, business lines, and supply chains. This diversity creates stable idiosyncratic spread behavior—each company's fundamentals and valuations drift independently. PCA successfully isolates these dislocations, enabling efficient residual mean reversion. The sector beta contributes noise rather than signal, so decomposing it away materially improves Sharpe.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent);">Category 2</p>
+    <h2>PCA Modest Outperformance: Nifty50, Bank, FMCG</h2>
+    <div class="comp-grid">
+      <div class="comp-box"><p>Nifty50</p><img class="comp-img" src="plots/nifty50_comparison.png" alt="Nifty50 comparison"></div>
+      <div class="comp-box"><p>Bank</p><img class="comp-img" src="plots/nifty_bank_comparison.png" alt="Bank comparison"></div>
+      <div class="comp-box"><p>FMCG</p><img class="comp-img" src="plots/nifty_fmcg_comparison.png" alt="FMCG comparison"></div>
+    </div>
+    <div class="grid3" style="margin-top:10px;">
+      <div class="card card-accent"><h3>nifty50</h3><p>Sharpe delta +0.359. PCA improves risk-adjusted profile, but baseline total return is still competitive.</p></div>
+      <div class="card card-accent"><h3>nifty_bank</h3><p>Sharpe delta +0.159. Both strategies work; PCA gives a small but consistent edge.</p></div>
+      <div class="card card-accent"><h3>nifty_fmcg</h3><p>Sharpe delta +0.577. Improvement is clear, though not as dramatic as top category.</p></div>
+    </div>
+    <div class="insight-box">
+      <p><strong>Hypothesis for investigation:</strong> Nifty50 (broad index), Bank, and FMCG are mature, highly liquid sectors with tighter peer relationships and business model homogeneity. Idiosyncratic variance is lower; most moves are driven by shared economic and monetary factors. While PCA still extracts useful structure, the common factor remains economically important. Index mean reversion captures significant portion of this common alpha, narrowing PCA's advantage.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--warn);">Category 3</p>
+    <h2>PCA Underperformance: Healthcare, Pharma, Auto</h2>
+    <div class="comp-grid">
+      <div class="comp-box"><p>Healthcare</p><img class="comp-img" src="plots/nifty_healthcare_comparison.png" alt="Healthcare comparison"></div>
+      <div class="comp-box"><p>Pharma</p><img class="comp-img" src="plots/nifty_pharma_comparison.png" alt="Pharma comparison"></div>
+      <div class="comp-box"><p>Auto</p><img class="comp-img" src="plots/nifty_auto_comparison.png" alt="Auto comparison"></div>
+    </div>
+    <div class="grid3" style="margin-top:10px;">
+      <div class="card card-orange"><h3 style="color:var(--warn);">Healthcare</h3><p>Healthcare often trades on event risk (USFDA outcomes, trial updates, litigation), creating jumpy stock-specific moves. Those jumps are not smooth mean-reverting residuals, so PCA residual entries can be mistimed.</p></div>
+      <div class="card card-orange"><h3 style="color:var(--warn);">Pharma</h3><p>Pharma constituents can be highly correlated around regulation and export demand, but that correlation shifts quickly by product cycle. Unstable factor structure weakens fixed-window PCA decomposition.</p></div>
+      <div class="card card-orange"><h3 style="color:var(--warn);">Auto</h3><p>Auto is strongly exposed to common macro drivers (rates, fuel prices, financing demand). A single index-level reversal signal captures this regime effect better than cross-sectional residual trades.</p></div>
+    </div>
+    <div class="insight-box">
+      <p><strong>Hypothesis for investigation:</strong> these three sectors combine regime-sensitive common beta with discontinuous stock-level shocks. That is a difficult environment for linear PCA residual mean reversion: factor loadings are not stable long enough, and residuals are not reliably elastic around a fixed mean.</p>
+    </div>
+  </div>
+</div>
+
+<div class="slide">
+  <div class="slide-inner">
+    <p class="section-label" style="color:var(--accent3);">Conclusion</p>
+    <h2>What We Learned and <span class="accent">Next Steps</span></h2>
+    <div class="grid2">
+      <div>
+        <div class="card card-green" style="margin-bottom:12px;">
+          <h3 style="color:var(--accent3);">Main Findings</h3>
+          <ul>
+            <li>PCA in this implementation shows a weak and inconsistent edge</li>
+            <li>Wins in 6 of 9 indices are not yet strong evidence of a robust signal</li>
+            <li>Performance dispersion suggests possible luck and regime dependence</li>
+            <li>Current result should be treated as hypothesis generation, not validation</li>
+          </ul>
+        </div>
+        <div class="card card-accent">
+          <h3>Modeling Takeaway</h3>
+          <p>Current PCA residual alpha is fragile. We need stronger evidence that high-performing indices respond to persistent structural drivers, not one-off sample luck.</p>
+        </div>
+      </div>
+      <div>
+        <div class="card card-purple" style="margin-bottom:12px;">
+          <h3 style="color:var(--accent2);">Immediate Extensions</h3>
+          <ul>
+            <li>Qualitatively inspect top PCs by index and map them to economic drivers</li>
+            <li>Test whether winners share structural traits that justify PCA strength</li>
+            <li>Run robustness checks across alternate split anchors and longer test horizons</li>
+          </ul>
+        </div>
+        <div class="card card-orange">
+          <h3 style="color:var(--warn);">Research Path</h3>
+          <ul>
+            <li>Replace pure train-set threshold search with interpretable entry/exit logic tied to index impact dynamics</li>
+            <li>Estimate how much a large constituent move propagates into index return before mean reversion triggers</li>
+            <li>Compare data-driven tuning against economically motivated thresholds</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <p style="text-align:center; margin-top:16px; font-size:.9rem; color:var(--text3);">Nifty Statistical Arbitrage Study - May 2026</p>
+  </div>
+</div>
+
+</div>
+
+<div class="nav">
+  <button onclick="toggleOverview()" title="Slide overview (O)">&#9783;</button>
+  <button onclick="prev()" title="Previous">&#9664;</button>
+  <button onclick="next()" title="Next">&#9654;</button>
+</div>
+
+<div id="overview">
+  <div style="max-width:980px; margin:0 auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+      <h2 style="color:#fff; font-size:1.3rem; background:none; -webkit-text-fill-color:#fff;">Slide Overview</h2>
+      <button onclick="toggleOverview()" style="background:none; border:1px solid rgba(255,255,255,.3); color:#fff; font-size:1.1rem; padding:6px 14px; border-radius:8px; cursor:pointer;">&#10005; Close</button>
+    </div>
+    <div id="overviewGrid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(155px, 1fr)); gap:12px;"></div>
+  </div>
+</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const total  = slides.length;
+let current  = 0;
+
+const slideNames = [
+  'Title',
+  'Research Question',
+  'Universe and Setup',
+  'PCA Methodology',
+  'Trading Logic & Grid Search',
+  'Baseline Strategy',
+  'Sharpe Delta Overview',
+  'Strong Outperformers',
+  'Modest Outperformers',
+  'Underperformers',
+  'Conclusion'
+];
+
+function go(n) {
+  if (n < 0 || n >= total) return;
+  slides[current].classList.remove('active');
+  current = n;
+  slides[current].classList.add('active');
+  document.getElementById('progress').style.width = ((current / (total - 1)) * 100) + '%';
+  document.getElementById('pageNum').textContent = (current + 1) + ' / ' + total;
+}
+function next() { go(current + 1); }
+function prev() { go(current - 1); }
+
+function toggleOverview() {
+  const ov = document.getElementById('overview');
+  if (ov.style.display === 'none' || ov.style.display === '') {
+    const grid = document.getElementById('overviewGrid');
+    grid.innerHTML = '';
+    for (let i = 0; i < total; i++) {
+      const btn = document.createElement('button');
+      btn.style.cssText = 'background:#fff; border:2px solid ' +
+        (i === current ? 'var(--accent)' : 'var(--surface2)') +
+        '; border-radius:10px; padding:14px 10px; cursor:pointer; text-align:center; width:100%;' +
+        'transition: border-color .2s, transform .2s;';
+      btn.innerHTML =
+        '<div style="font-size:1.4rem; font-weight:800; color:var(--accent); margin-bottom:4px;">' + (i+1) + '</div>' +
+        '<div style="font-size:.72rem; color:var(--text2); font-weight:500; line-height:1.3;">' + (slideNames[i] || ('Slide '+(i+1))) + '</div>';
+      btn.onmouseover = function() { this.style.transform = 'scale(1.05)'; };
+      btn.onmouseout  = function() { this.style.transform = 'scale(1)'; };
+      btn.onclick = (function(idx) { return function() { go(idx); toggleOverview(); }; })(i);
+      grid.appendChild(btn);
+    }
+    ov.style.display = 'block';
+  } else {
+    ov.style.display = 'none';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape')  { document.getElementById('overview').style.display = 'none'; return; }
+  if (document.getElementById('overview').style.display === 'block') return;
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+  if (e.key === 'ArrowLeft')                    { e.preventDefault(); prev(); }
+  if (e.key === 'o' || e.key === 'O')           { e.preventDefault(); toggleOverview(); }
+});
+
+let touchX = 0;
+document.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; });
+document.addEventListener('touchend',   e => {
+  const dx = e.changedTouches[0].clientX - touchX;
+  if (dx < -50) next();
+  if (dx > 50)  prev();
+});
+
+go(0);
+</script>
+</body>
+</html>

@@ -19,6 +19,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from nifty50_stat_arb.pca import compute_pca
+
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_RETURNS_PATH = os.path.join(PROJECT_ROOT, "data", "nifty50", "returns.csv")
@@ -31,10 +33,12 @@ class BacktestConfig:
     pca_components_path: str = DEFAULT_PCA_COMPONENTS_PATH
     train_fraction: float = 0.8
     lookback: int = 60
-    long_entry_z: float = -2.0
-    short_entry_z: float = 2.0
-    long_exit_z: float = -0.5
-    short_exit_z: float = 0.5
+    long_entry_z: float = -1.5
+    short_entry_z: float = 1.5
+    long_exit_z: float = 0.0
+    short_exit_z: float = 0.0
+    refit_months: int = 6
+    trade_months: int = 6
 
 
 def load_returns(path: str) -> pd.DataFrame:
@@ -83,86 +87,251 @@ def compute_predicted_returns(returns: pd.DataFrame, betas: pd.DataFrame) -> pd.
     return pd.DataFrame(predicted, index=r.index, columns=common_assets)
 
 
-def run_backtest(config: BacktestConfig) -> pd.DataFrame:
-    """Run the PCA residual strategy and return daily portfolio returns."""
-    returns = load_returns(config.returns_path)
-    betas = load_betas(config.pca_components_path)
-    predicted = compute_predicted_returns(returns, betas)
+def _build_betas_from_ranked_table(ranked_table: pd.DataFrame) -> pd.DataFrame:
+    """Convert PCA ranked table to the component-loading matrix used by the backtest."""
+    meta_cols = {
+        "component",
+        "eigenvalue",
+        "explained_variance_pct",
+        "cumulative_variance_pct",
+    }
+    asset_cols = [c for c in ranked_table.columns if c not in meta_cols]
+    betas = ranked_table[asset_cols].copy()
+    betas.index = ranked_table["component"].astype(str)
+    return betas
 
-    aligned_returns = returns[predicted.columns].copy()
-    residuals = aligned_returns - predicted
-    rolling_std = residuals.rolling(config.lookback).std().shift(1)
-    zscores = residuals / rolling_std
 
-    split_idx = int(len(zscores) * config.train_fraction)
-    test_dates = zscores.index[split_idx:]
-    test_zscores = zscores.loc[test_dates].copy()
-    test_returns = aligned_returns.loc[test_dates].copy()
+def _get_refit_trade_blocks(
+    dates: pd.DatetimeIndex,
+    refit_months: int,
+    trade_months: int,
+) -> list[tuple[pd.DatetimeIndex, pd.DatetimeIndex]]:
+    """Create rolling calendar blocks: fit on M months, trade next N months."""
+    if len(dates) == 0:
+        return []
 
-    assets = list(test_zscores.columns)
+    blocks: list[tuple[pd.DatetimeIndex, pd.DatetimeIndex]] = []
+    fit_start = dates[0]
 
-    positions = {asset: 0 for asset in assets}  # +1 long, -1 short, 0 flat
+    while True:
+        fit_end = fit_start + pd.DateOffset(months=refit_months)
+        trade_end = fit_end + pd.DateOffset(months=trade_months)
+
+        fit_dates = dates[(dates >= fit_start) & (dates < fit_end)]
+        trade_dates = dates[(dates >= fit_end) & (dates < trade_end)]
+
+        if len(fit_dates) < 2 or len(trade_dates) < 2:
+            break
+
+        blocks.append((fit_dates, trade_dates))
+
+        # Roll forward exactly by the traded window as requested.
+        fit_start = fit_end
+
+    return blocks
+
+
+def run_backtest_on_df(returns: pd.DataFrame, config: BacktestConfig, verbose: bool = True) -> pd.DataFrame:
+    """Core rolling refit / trade PCA residual strategy on a pre-loaded returns DataFrame."""
+    blocks = _get_refit_trade_blocks(
+        returns.index,
+        refit_months=config.refit_months,
+        trade_months=config.trade_months,
+    )
+
+    if not blocks:
+        return pd.DataFrame(columns=["strategy_return", "cumulative_return", "long_count", "short_count"])
+
     portfolio_returns: list[float] = []
     long_counts: list[int] = []
     short_counts: list[int] = []
     pnl_dates: list[pd.Timestamp] = []
 
-    for i, date in enumerate(test_dates):
-        day_z = test_zscores.loc[date].dropna()
-        if day_z.empty:
+    for block_num, (fit_dates, trade_dates) in enumerate(blocks, start=1):
+        fit_returns = returns.loc[fit_dates]
+
+        _, _, ranked_table = compute_pca(
+            fit_returns,
+            train_fraction=1.0,
+            variance_threshold=0.99,
+        )
+        betas = _build_betas_from_ranked_table(ranked_table)
+
+        # Compute z-scores with context from fit + trade to preserve rolling-vol logic.
+        block_slice = returns.loc[fit_dates[0]:trade_dates[-1]].copy()
+        predicted = compute_predicted_returns(block_slice, betas)
+        aligned_returns = block_slice[predicted.columns].copy()
+        residuals = aligned_returns - predicted
+        rolling_std = residuals.rolling(config.lookback).std().shift(1)
+        zscores = residuals / rolling_std
+
+        test_dates = [d for d in trade_dates if d in zscores.index]
+        if len(test_dates) < 2:
             continue
 
-        for asset, pos in list(positions.items()):
-            z_value = day_z.get(asset, np.nan)
-            if np.isnan(z_value):
+        test_zscores = zscores.loc[test_dates].copy()
+        test_returns = aligned_returns.loc[test_dates].copy()
+
+        assets = list(test_zscores.columns)
+        positions = {asset: 0 for asset in assets}  # +1 long, -1 short, 0 flat
+
+        if verbose:
+            print(
+                f"\nBlock {block_num}: fit {fit_dates[0].date()} to {fit_dates[-1].date()} | "
+                f"trade {test_dates[0].date()} to {test_dates[-1].date()}"
+            )
+
+        for i, date in enumerate(test_dates):
+            day_z = test_zscores.loc[date].dropna()
+            if day_z.empty:
                 continue
 
-            # Exit rules by z-score reversion.
-            if pos == 1 and z_value >= config.long_exit_z:
-                print(f"{date.date()} EXIT LONG  {asset:12s} z={z_value: .4f}")
-                positions[asset] = 0
-            elif pos == -1 and z_value <= config.short_exit_z:
-                print(f"{date.date()} EXIT SHORT {asset:12s} z={z_value: .4f}")
-                positions[asset] = 0
+            for asset, pos in list(positions.items()):
+                z_value = day_z.get(asset, np.nan)
+                if np.isnan(z_value):
+                    continue
 
-        for asset in day_z.index:
-            if positions[asset] != 0:
-                continue
+                # Exit rules by z-score reversion.
+                if pos == 1 and z_value >= config.long_exit_z:
+                    if verbose:
+                        print(f"{date.date()} EXIT LONG  {asset:12s} z={z_value: .4f}")
+                    positions[asset] = 0
+                elif pos == -1 and z_value <= config.short_exit_z:
+                    if verbose:
+                        print(f"{date.date()} EXIT SHORT {asset:12s} z={z_value: .4f}")
+                    positions[asset] = 0
 
-            z_value = day_z[asset]
-            if z_value <= config.long_entry_z:
-                positions[asset] = 1
-                print(f"{date.date()} ENTER LONG {asset:12s} z={z_value: .4f}")
-            elif z_value >= config.short_entry_z:
-                positions[asset] = -1
-                print(f"{date.date()} ENTER SHORT {asset:12s} z={z_value: .4f}")
+            for asset in day_z.index:
+                if positions[asset] != 0:
+                    continue
 
-        # Apply end-of-day positions to next-day return.
-        if i + 1 < len(test_dates):
-            next_date = test_dates[i + 1]
-            next_ret = test_returns.loc[next_date]
+                z_value = day_z[asset]
+                if z_value <= config.long_entry_z:
+                    positions[asset] = 1
+                    if verbose:
+                        print(f"{date.date()} ENTER LONG {asset:12s} z={z_value: .4f}")
+                elif z_value >= config.short_entry_z:
+                    positions[asset] = -1
+                    if verbose:
+                        print(f"{date.date()} ENTER SHORT {asset:12s} z={z_value: .4f}")
 
-            long_assets = [asset for asset, pos in positions.items() if pos == 1]
-            short_assets = [asset for asset, pos in positions.items() if pos == -1]
+            # Apply end-of-day positions to next-day return.
+            if i + 1 < len(test_dates):
+                next_date = test_dates[i + 1]
+                next_ret = test_returns.loc[next_date]
 
-            long_pnl = next_ret[long_assets].mean() if long_assets else 0.0
-            short_pnl = -next_ret[short_assets].mean() if short_assets else 0.0
-            day_pnl = 0.5 * long_pnl + 0.5 * short_pnl
+                long_assets = [asset for asset, pos in positions.items() if pos == 1]
+                short_assets = [asset for asset, pos in positions.items() if pos == -1]
 
-            portfolio_returns.append(float(day_pnl))
-            long_counts.append(len(long_assets))
-            short_counts.append(len(short_assets))
-            pnl_dates.append(next_date)
+                long_pnl = next_ret[long_assets].mean() if long_assets else 0.0
+                short_pnl = -next_ret[short_assets].mean() if short_assets else 0.0
+                day_pnl = 0.5 * long_pnl + 0.5 * short_pnl
+
+                portfolio_returns.append(float(day_pnl))
+                long_counts.append(len(long_assets))
+                short_counts.append(len(short_assets))
+                pnl_dates.append(next_date)
 
     pnl = pd.Series(portfolio_returns, index=pnl_dates, name="strategy_return")
     cumulative = (1.0 + pnl).cumprod() - 1.0
-    result = pd.DataFrame({
+    return pd.DataFrame({
         "strategy_return": pnl,
         "cumulative_return": cumulative,
         "long_count": long_counts,
         "short_count": short_counts,
     })
+
+
+def run_backtest(config: BacktestConfig) -> pd.DataFrame:
+    """Run rolling refit / trade PCA residual strategy."""
+    returns = load_returns(config.returns_path)
+    result = run_backtest_on_df(returns, config, verbose=True)
     return result
+
+def run_backtest_baseline_on_df(returns: pd.DataFrame, config: BacktestConfig, verbose: bool = True) -> pd.DataFrame:
+    """
+    Index mean-reversion baseline strategy on a pre-loaded returns DataFrame.
+    
+    Instead of PCA residuals per asset, we use a single index-level z-score:
+    - Index return = mean return across all assets
+    - z-score = (index_return - rolling_mean) / rolling_std
+    - Entry/exit rules apply to the entire index (all assets held equally)
+    """
+    blocks = _get_refit_trade_blocks(
+        returns.index,
+        refit_months=config.refit_months,
+        trade_months=config.trade_months,
+    )
+
+    if not blocks:
+        return pd.DataFrame(columns=["strategy_return", "cumulative_return", "long_count", "short_count"])
+
+    portfolio_returns: list[float] = []
+    long_counts: list[int] = []
+    short_counts: list[int] = []
+    pnl_dates: list[pd.Timestamp] = []
+
+    for block_num, (fit_dates, trade_dates) in enumerate(blocks, start=1):
+        block_slice = returns.loc[fit_dates[0]:trade_dates[-1]].copy()
+        index_returns = block_slice.mean(axis=1)
+        rolling_mean = index_returns.rolling(config.lookback).mean().shift(1)
+        rolling_std = index_returns.rolling(config.lookback).std().shift(1)
+        zscores = (index_returns - rolling_mean) / rolling_std
+        
+        test_dates = [d for d in trade_dates if d in zscores.index]
+        if len(test_dates) < 2:
+            continue
+
+        test_zscores = zscores.loc[test_dates]
+        test_returns = block_slice.loc[test_dates]
+        position = 0
+        
+        if verbose:
+            print(f"\nBlock {block_num}: trade {test_dates[0].date()} to {test_dates[-1].date()}")
+
+        for i, date in enumerate(test_dates):
+            z_value = test_zscores.loc[date]
+            if np.isnan(z_value):
+                continue
+
+            if position == 1 and z_value >= config.long_exit_z:
+                if verbose:
+                    print(f"{date.date()} EXIT LONG  (index) z={z_value: .4f}")
+                position = 0
+            elif position == -1 and z_value <= config.short_exit_z:
+                if verbose:
+                    print(f"{date.date()} EXIT SHORT (index) z={z_value: .4f}")
+                position = 0
+
+            if position == 0:
+                if z_value <= config.long_entry_z:
+                    position = 1
+                    if verbose:
+                        print(f"{date.date()} ENTER LONG (index) z={z_value: .4f}")
+                elif z_value >= config.short_entry_z:
+                    position = -1
+                    if verbose:
+                        print(f"{date.date()} ENTER SHORT (index) z={z_value: .4f}")
+
+            if i + 1 < len(test_dates):
+                next_date = test_dates[i + 1]
+                next_ret = test_returns.loc[next_date].mean()
+                day_pnl = position * next_ret
+                portfolio_returns.append(float(day_pnl))
+                long_count = len(test_returns.columns) if position == 1 else 0
+                short_count = len(test_returns.columns) if position == -1 else 0
+                long_counts.append(long_count)
+                short_counts.append(short_count)
+                pnl_dates.append(next_date)
+
+    pnl = pd.Series(portfolio_returns, index=pnl_dates, name="strategy_return")
+    cumulative = (1.0 + pnl).cumprod() - 1.0
+    return pd.DataFrame({
+        "strategy_return": pnl,
+        "cumulative_return": cumulative,
+        "long_count": long_counts,
+        "short_count": short_counts,
+    })
 
 
 def summarize_results(results: pd.DataFrame) -> None:
@@ -198,8 +367,8 @@ def main() -> None:
     parser.add_argument("--lookback", type=int, default=20)
     parser.add_argument("--long-entry-z", type=float, default=-2.5)
     parser.add_argument("--short-entry-z", type=float, default=2.5)
-    parser.add_argument("--long-exit-z", type=float, default=-1.0)
-    parser.add_argument("--short-exit-z", type=float, default=1.0)
+    parser.add_argument("--long-exit-z", type=float, default=-1.5)
+    parser.add_argument("--short-exit-z", type=float, default=1.5)
     parser.add_argument(
         "--save-results-path",
         type=str,

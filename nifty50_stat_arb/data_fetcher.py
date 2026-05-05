@@ -54,7 +54,7 @@ class DataFetcher:
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        period: str = "1y",
+        period: str = "10y",
         cache_path: Optional[str] = None,
         returns_cache_path: Optional[str] = None,
         refresh_cache: bool = False
@@ -98,6 +98,7 @@ class DataFetcher:
                         print("Cached data does not contain any rows for the requested range; refetching...")
                         cached_df = None
                     else:
+                        filtered = self._prepare_prices(filtered)
                         self._save_returns(filtered, returns_cache_path)
                         print(f"Loaded data from cache: {cache_file}")
                         return filtered
@@ -131,14 +132,9 @@ class DataFetcher:
         if not series_list:
             raise ValueError("No data fetched for any symbols")
         
-        # Combine into a single DataFrame
+        # Combine into a single DataFrame and enforce a stable stock universe.
         prices_df = pd.concat(series_list, axis=1)
-        
-        # Drop rows with too many missing values
-        prices_df = prices_df.dropna(thresh=len(prices_df.columns) * 0.8)
-        
-        # Forward fill remaining NaN values
-        prices_df = prices_df.ffill().bfill()
+        prices_df = self._prepare_prices(prices_df)
         
         print(f"Successfully fetched data: {prices_df.shape[0]} days, {prices_df.shape[1]} stocks")
 
@@ -151,6 +147,45 @@ class DataFetcher:
 
         self._save_returns(filtered, returns_cache_path)
         return filtered
+
+    @staticmethod
+    def _prepare_prices(prices: pd.DataFrame) -> pd.DataFrame:
+        """Clean raw prices and drop recently listed stocks from the sample.
+
+        Rule used for excluding recent listings:
+        - Keep only symbols that have data on the first available date in the
+          requested window.
+        """
+        if prices.empty:
+            raise ValueError("No price data available after download")
+
+        prepared = prices.sort_index().copy()
+        first_date = prepared.index[0]
+
+        eligible_mask = prepared.loc[first_date].notna()
+        dropped_recent = prepared.columns[~eligible_mask].tolist()
+        prepared = prepared.loc[:, eligible_mask]
+
+        if dropped_recent:
+            print(
+                "Dropped recently listed symbols (missing at start of window): "
+                f"{dropped_recent}"
+            )
+
+        if prepared.shape[1] < 2:
+            raise ValueError(
+                "Not enough symbols with full-window history after filtering "
+                "recent listings"
+            )
+
+        # Keep dates where most assets traded, then forward-fill occasional gaps.
+        prepared = prepared.dropna(thresh=max(2, int(prepared.shape[1] * 0.8)))
+        prepared = prepared.ffill()
+
+        # Final safety: remove any remaining incomplete rows.
+        prepared = prepared.dropna(how="any")
+
+        return prepared
     
     def get_returns(self, prices: pd.DataFrame) -> pd.DataFrame:
         """

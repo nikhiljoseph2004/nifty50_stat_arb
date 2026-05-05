@@ -7,6 +7,7 @@ import os
 
 import numpy as np
 import pandas as pd
+from sklearn.covariance import LedoitWolf
 
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -26,7 +27,7 @@ def compute_pca(
     train_fraction: float = 0.8,
     variance_threshold: float = 0.99,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Compute PCA on the first train_fraction of the return history."""
+    """Compute PCA on the first train_fraction of returns using Ledoit-Wolf covariance."""
     if returns.empty:
         raise ValueError("Returns data is empty")
 
@@ -40,9 +41,15 @@ def compute_pca(
     training_returns = returns.iloc[:train_size].copy()
 
     if training_returns.shape[0] < 2:
-        raise ValueError("At least two rows are required to compute sample covariance")
+        raise ValueError("At least two rows are required to estimate covariance")
 
-    covariance = training_returns.cov()
+    lw = LedoitWolf()
+    lw.fit(training_returns.to_numpy())
+    covariance = pd.DataFrame(
+        lw.covariance_,
+        index=training_returns.columns,
+        columns=training_returns.columns,
+    )
     eigenvalues, eigenvectors = np.linalg.eigh(covariance.to_numpy())
 
     order = np.argsort(eigenvalues)[::-1]
@@ -93,7 +100,7 @@ def print_pca_summary(
         f"Training window: {training_returns.index[0].date()} to {training_returns.index[-1].date()} "
         f"({training_returns.shape[0]} rows, first {train_fraction:.0%} of data)"
     )
-    print(f"Sample covariance matrix shape: {covariance.shape}")
+    print(f"Ledoit-Wolf covariance matrix shape: {covariance.shape}")
     print(
         f"Retained {len(ranked_table)} components to explain "
         f"{ranked_table['cumulative_variance_pct'].iloc[-1]:.2f}% of variance"

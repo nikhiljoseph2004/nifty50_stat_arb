@@ -32,7 +32,7 @@ class PipelineConfig:
     # Date range for price fetch (pass both or neither)
     start_date: Optional[str] = None
     end_date: Optional[str] = None
-    period: str = "5y"  # used only when start_date/end_date are not given
+    period: str = "10y"  # used only when start_date/end_date are not given
 
     # Backtest parameters
     train_fraction: float = 0.8
